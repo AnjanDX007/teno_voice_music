@@ -1,0 +1,15 @@
+services:
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    restart: unless-stopped
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
+    expose:
+      - "2333" # only reachable by other containers on this network, not your host
+
+  teno:
+    build: .
+    env_file: .env
+    depends_on:
+      - lavalink
+    restart: unless-stopped
