@@ -7,9 +7,32 @@ services:
     expose:
       - "2333" # only reachable by other containers on this network, not your host
 
+  whisper:
+    build:
+      context: .
+      target: whisper-service
+    restart: unless-stopped
+    expose:
+      - "8080" # only reachable by other containers on this network, not your host
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama # persists downloaded models across restarts
+    expose:
+      - "11434" # only reachable by other containers on this network, not your host
+
   teno:
-    build: .
+    build:
+      context: .
+      target: teno
     env_file: .env
     depends_on:
       - lavalink
+      - whisper
+      - ollama
     restart: unless-stopped
+
+volumes:
+  ollama-models:

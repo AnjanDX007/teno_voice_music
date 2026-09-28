@@ -4,12 +4,10 @@ import {
   type VoiceConnection,
 } from "@discordjs/voice";
 import prism from "prism-media";
-import { spawn, execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import type { VoiceBasedChannel } from "discord.js";
 import { getLavalink } from "./lavalink.js";
-
-const execFileAsync = promisify(execFile);
+import { transcribeWithWhisperServer } from "./transcribe.js";
 
 interface ListenSession {
   connection: VoiceConnection;
@@ -92,8 +90,9 @@ export async function startListening(opts: StartListeningOptions): Promise<void>
   sessions.set(opts.guildId, { connection, wavPath, ffmpeg });
 }
 
-// Stops the session, finalizes the WAV file, runs it through whisper-cli,
-// and returns the transcript (may be an empty string if nothing was said).
+// Stops the session, finalizes the WAV file, sends it to whisper-server
+// for transcription, and returns the transcript (may be an empty string
+// if nothing was said).
 export async function stopListeningAndTranscribe(guildId: string): Promise<string> {
   const session = sessions.get(guildId);
   if (!session) {
@@ -108,12 +107,7 @@ export async function stopListeningAndTranscribe(guildId: string): Promise<strin
   session.connection.destroy();
 
   try {
-    const { stdout } = await execFileAsync("whisper-cli", [
-      "-m", "/app/models/ggml-base.en.bin",
-      "-f", session.wavPath,
-      "-nt", // no per-segment timestamps — just the plain text
-    ]);
-    return stdout.trim();
+    return await transcribeWithWhisperServer(session.wavPath);
   } catch (err) {
     throw new Error(
       `Transcription failed: ${err instanceof Error ? err.message : String(err)}`

@@ -24,13 +24,22 @@ runs that you can't trace by reading it top to bottom.
   against YouTube's changes, so we resolve the URL ourselves and hand
   Lavalink a plain HTTP stream instead of asking it to talk to YouTube
   directly.
+- `src/transcribe.ts` — talks to the `whisper` service (a separate
+  container running `whisper-server`) over HTTP. Replaces an earlier
+  approach that spawned `whisper-cli` fresh per call, which reloaded the
+  whole model from disk every single time — that reload was the actual
+  source of transcription lag, not the audio pipeline itself.
 - `src/voiceSession.ts` — owns manual listen sessions: joins the voice
-  channel, captures your audio, converts it, and runs it through
-  `whisper-cli` for transcription. `/listen` starts a session,
-  `/stoplisten` ends it and returns the transcript.
+  channel, captures your audio, converts it, and sends it to the whisper
+  service for transcription. `/listen` starts a session, `/stoplisten`
+  ends it and returns the transcript.
+- `src/llm.ts` — Teno's actual "brain": sends the transcript to a
+  self-hosted LLM (Ollama) and asks it to classify what was meant
+  (play/skip/stop/just chatting) and draft a short reply, instead of
+  matching literal keywords.
 - `src/commands/listen.ts` / `stoplisten.ts` — the manual wake commands.
-  `/stoplisten` also does a first, simple pass at *reacting* to what it
-  heard (play/skip/stop keywords) on top of just showing the transcript.
+  `/stoplisten` sends the transcript to the LLM and reacts based on what
+  it decides, on top of showing the raw transcript.
 - `src/commands/ping.ts` — one command. `data` describes it to Discord,
   `execute` is what runs when someone uses it.
 - `src/commands/play.ts` / `skip.ts` / `stop.ts` — music commands, all
@@ -100,9 +109,32 @@ Try in Discord: join a voice channel, then `/play <song name>`, `/skip`,
 re-register, fully reload the Discord client (Cmd+R desktop, hard
 refresh in browser) — it caches command schemas locally.
 
+**One-time step for the LLM brain:** Ollama's image ships with no model
+built in — pull one after the containers are up:
+
+```bash
+docker compose exec ollama ollama pull llama3.2:3b
+```
+
+`llama3.2:3b` is a reasonable balance of speed and quality for a Mac.
+If it feels slow, `llama3.2:1b` is faster but less sharp at understanding
+what you meant; either way, whatever you pull must match `OLLAMA_MODEL`
+in your `.env`.
+
+Add these three lines to `.env`:
+
+```
+OLLAMA_HOST=ollama
+OLLAMA_PORT=11434
+OLLAMA_MODEL=llama3.2:3b
+```
+
 For voice listening: join a voice channel (with no music playing),
 `/listen`, say something, `/stoplisten`. You should see the transcript,
-and if it started with "play", "skip", or "stop" it'll actually act on it.
+then Teno's LLM-generated reply, and if it understood a play/skip/stop
+request it'll actually act on it — including loosely-phrased requests
+("can you skip this") or corrected garbled song names, not just exact
+keyword matches.
 
 ## Next step
 
