@@ -6,7 +6,13 @@ services:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
     expose:
       - "2333" # only reachable by other containers on this network, not your host
-
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:2333/v4/info || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+      
   whisper:
     build:
       context: .
